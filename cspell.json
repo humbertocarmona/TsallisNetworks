@@ -1,0 +1,22 @@
+{
+    "version": "0.2",
+    "ignorePaths": [],
+    "dictionaryDefinitions": [],
+    "dictionaries": [],
+    "words": [
+        "creategraph",
+        "edgeweights",
+        "expq",
+        "getlogger",
+        "hypersphere",
+        "Makie",
+        "nodepositions",
+        "plotgraph",
+        "rmax",
+        "rmin",
+        "setlevel",
+        "spzeros"
+    ],
+    "ignoreWords": [],
+    "import": []
+}
