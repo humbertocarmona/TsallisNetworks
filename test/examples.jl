@@ -124,6 +124,9 @@ println("\nsaved and read back: $path")
 # 5. Recruitment through edges: multigraph degrees and simple projection
 # ---------------------------------------------------------------------------
 
+# The L=0 edge-attachment rule is from Dorogovtsev, Mendes & Samukhin,
+# Phys. Rev. E 63, 062101 (2001), doi:10.1103/PhysRevE.63.062101.
+# L>0 adds the virtual-loop extension described in the generator's comments.
 # Each node has L virtual recruitment loops, excluded from physical degree.
 # Selecting a physical edge forms a triangle; selecting a virtual loop adds
 # two parallel physical edges to its owner. Every newcomer has degree two.

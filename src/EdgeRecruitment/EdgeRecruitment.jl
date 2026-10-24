@@ -65,6 +65,14 @@ Returns a `RecruitmentGraph`, preserving all physical edge multiplicities.
 Every newcomer has physical degree two. Runs in O(N + E) time and space;
 virtual loops are sampled implicitly rather than allocated. `L=0` gives the
 ordinary edge-based triangle-growth rule.
+# Reference for the L=0 rule (attach a newcomer to both endpoints of a
+# uniformly selected physical edge): S. N. Dorogovtsev, J. F. F. Mendes,
+# and A. N. Samukhin, "Size-dependent degree distribution of a scale-free
+# growing network", Phys. Rev. E 63, 062101 (2001).
+# https://doi.org/10.1103/PhysRevE.63.062101
+# Preprint: https://arxiv.org/abs/cond-mat/0011115
+# The L>0 virtual-loop construction here is an extension; this reference
+# does not establish that variant or its novelty.
 """
 function edge_recruitment_graph(N::Integer; L::Integer=1, n0::Integer=3,
     rng::AbstractRNG=Random.default_rng(), T::Type{<:Integer}=Int)
@@ -86,7 +94,7 @@ function edge_recruitment_graph(N::Integer; L::Integer=1, n0::Integer=3,
     for t in (n0+1):N
         n = t - 1
         E = length(edge_list)
-        object = rand(rng, 1:(E + L * n))
+        object = rand(rng, 1:(E+L*n))
         u, v = if object <= E
             edge_list[object]
         else
