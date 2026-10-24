@@ -15,5 +15,6 @@ using Test
     include("observables.jl")
     include("configuration_model.jl")
     include("preferential_random.jl")
+    include("edge_recruitment.jl")
     include("spatial_preferential_attachment.jl")
 end

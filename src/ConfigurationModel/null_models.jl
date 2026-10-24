@@ -55,14 +55,18 @@ end
     a-c and b-d); a swap is rejected if it would create a self-loop or a
     multi-edge. Every degree is kept exactly and the result is a simple graph.
 
-    Returns a new graph and the fraction of accepted swaps.
+    Returns a new graph and the fraction of accepted swaps (0.0 if no
+    swaps are attempted). Connectivity is not preserved.
 """
 function rewire(g::SimpleGraph; swaps_per_edge::Real=10,
     rng::AbstractRNG=Random.default_rng())
+    isfinite(swaps_per_edge) && swaps_per_edge >= 0 ||
+        throw(ArgumentError("swaps_per_edge must be finite and nonnegative"))
     h = copy(g)
     E = [(src(e), dst(e)) for e in edges(h)]
     M = length(E)
     attempts = round(Int, swaps_per_edge * M)
+    attempts == 0 && return h, 0.0
     accepted = 0
     for _ in 1:attempts
         i = rand(rng, 1:M)

@@ -1,5 +1,5 @@
-# Examples: generate networks with the C-R and P-R models of Ochiai & Nacher,
-# Physica A 388, 4887 (2009), and compute their observables. Not part of the
+# Examples: generate C-R and P-R networks of Ochiai & Nacher, Physica A 388,
+# 4887 (2009), and edge-recruitment networks; compute their observables. Not part of the
 # test suite (runtests.jl); run it from the package folder with
 #
 #   julia --project=. -t 4 test/examples.jl
@@ -9,6 +9,7 @@
 using TsallisNetworks                       # expq, lnq, save_bz2_csv, load_bz2_csv
 using TsallisNetworks.CopyRandom            # copy_random_graph
 using TsallisNetworks.PreferentialRandom    # preferential_random_graph, pr_pk, pr_qexp
+using TsallisNetworks.EdgeRecruitment       # physical multigraph and degree predictions
 using TsallisNetworks.Observables           # mean_shortest_path, clustering, ...
 using DataFrames
 using Graphs
@@ -16,7 +17,7 @@ using Random
 using Statistics
 
 N = 10_000
-
+# %% --------------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # 1. Generate the networks
 # ---------------------------------------------------------------------------
@@ -43,13 +44,13 @@ end
 # exact P(k) of the rate equation, and the q-exponential e_q(-k/κ) of its tail
 (; q, κ) = pr_qexp(α)
 pk = pr_pk(α, 10)
-qexp = [expq(-k / κ, q) for k in 1:10^6]
+qexp = [expq(-k / κ, q) for k in 1:(10^6)]
 qexp ./= sum(qexp)
 degs = degree(g_pr)
 println("\nP-R, α = $α: q = $(round(q; digits=4)), κ = $(round(κ; digits=4))")
 println(DataFrame(k=1:10, simulation=[mean(degs .== k) for k in 1:10],
     rate_equation=pk, qexp=qexp[1:10]))
-
+# %% --------------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # 3. Observables of one network
 # ---------------------------------------------------------------------------
@@ -88,12 +89,12 @@ for (name, r) in (("random failure", rand_fail), ("targeted attack", attack))
 end
 # S at a few fractions f of removed nodes (r.S[i] has i - 1 nodes removed)
 fs = [0.0, 0.1, 0.2, 0.5]
-println(DataFrame(f=fs, S_random=[rand_fail.S[round(Int, f * N)+1] for f in fs],
-    S_targeted=[attack.S[round(Int, f * N)+1] for f in fs]))
+println(DataFrame(f=fs, S_random=[rand_fail.S[round(Int, f*N)+1] for f in fs],
+    S_targeted=[attack.S[round(Int, f*N)+1] for f in fs]))
 
 # all scalar observables at once (⟨ℓ⟩ here on the largest component, 200 sources)
 println("\nobservables: ", observables(g; rng=Xoshiro(4)))
-
+# %% --------------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # 4. Ensemble: observables over several realizations, both models
 # ---------------------------------------------------------------------------
@@ -118,3 +119,64 @@ path = tempname() * ".csv.bz2"
 save_bz2_csv(path, ens)
 @assert load_bz2_csv(path) == ens
 println("\nsaved and read back: $path")
+# %% --------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 5. Recruitment through edges: multigraph degrees and simple projection
+# ---------------------------------------------------------------------------
+
+# Each node has L virtual recruitment loops, excluded from physical degree.
+# Selecting a physical edge forms a triangle; selecting a virtual loop adds
+# two parallel physical edges to its owner. Every newcomer has degree two.
+L = 1
+N=1_000_000
+g_er = edge_recruitment_graph(N; L=L, n0=3, rng=Xoshiro(5))
+physical_degrees = degree(g_er)
+println("\nEdge recruitment, L = $L: N = $(nv(g_er)), physical edges = $(ne(g_er)), ",
+    "<k> = $(round(mean(physical_degrees); digits=3))")
+
+# Compute the complete empirical degree PMF, including zero-count degrees.
+# Predictions concern physical multiplicities, not the simple projection.
+er_empirical = recruitment_degree_distribution(g_er)
+er_parameters = recruitment_qexp(L)
+er_kmax = last(er_empirical.k)
+er_pk = recruitment_pk(L, er_kmax)
+er_continuum(k) = (L + 2) / (2L + 2) * ((k + 2L) / (2L + 2))^(-(L + 3))
+# Integrate the normalized continuum density over [k,k+1) for a PMF
+# comparison; density values at integer k are not discrete probabilities.
+er_survival(k) = ((k + 2L) / (2L + 2))^(-(L + 2))
+er_distribution = DataFrame(k=er_empirical.k, count=er_empirical.n,
+    simulation=er_empirical.pk,
+    stationary_discrete=vcat(0.0, er_pk),
+    continuum = [k < 2 ? 0.0 : er_continuum(k)
+        for k in er_empirical.k],
+    continuum_bin_mass=[k < 2 ? 0.0 : er_survival(k) - er_survival(k + 1)
+        for k in er_empirical.k])
+er_distribution.residual = er_distribution.simulation .- er_distribution.stationary_discrete
+println("Continuum parameters: ", er_parameters)  # q = 1.25, κ = 0.5
+println("Physical degree distribution (first 20 degrees; full table: er_distribution):")
+println(first(er_distribution, 20))
+# %% --------------------------------------------------------------------------------
+# Keep the predicted probability beyond the observed maximum: renormalizing
+# at that maximum would conceal part of the finite-size discrepancy.
+er_predicted_tail = max(0.0, 1 - sum(er_pk))
+er_total_variation = (sum(abs, er_distribution.residual) + er_predicted_tail) / 2
+println("Observed maximum degree = $er_kmax, predicted mass above it = $er_predicted_tail")
+println("Total variation from the limiting discrete law = $er_total_variation ",
+    "(descriptive finite-size comparison, not a goodness-of-fit p-value)")
+
+# Existing observables operate on simple graphs. Projection collapses parallel
+# edges and changes degrees: its statistics describe the projection, whereas
+# the predictions above describe the physical multigraph.
+h_er = simple_projection(g_er)
+println("Simple projection: edges = $(ne(h_er)), collapsed parallel edges = ",
+    ne(g_er) - ne(h_er), ", connected = $(is_connected(h_er))")
+println("Projected clustering: ", clustering(h_er))
+println("Projected <ℓ> (500 sources): ",
+    mean_shortest_path(h_er; nsources=500, rng=Xoshiro(6)))
+
+# L = 0 has no virtual-loop events and therefore no parallel edges.
+# Its continuum law is the pure power law 8k^-3: do not evaluate expq(-k/κ,q)
+# with the returned κ = 0.
+g_er0 = edge_recruitment_graph(N; L=0, rng=Xoshiro(7))
+@assert ne(simple_projection(g_er0)) == ne(g_er0)
+println("L = 0 continuum parameters (pure power law): ", recruitment_qexp(0))
