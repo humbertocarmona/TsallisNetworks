@@ -34,6 +34,64 @@ using Test
         @test pr_pk(1.0, 50) ≈ 4 ./ (k .* (k .+ 1) .* (k .+ 2))
     end
 
+    @testset "multi-edge extension" begin
+        for m0 in (2, 4), α in (0.0, 0.5, 1.0)
+            N, n0 = 2000, m0 + 1
+            g = preferential_random_graph(N, α; m0, rng=Xoshiro(31), T=Int32)
+            @test nv(g) == N
+            @test ne(g) == n0*(n0-1)÷2 + m0*(N-n0)
+            @test all(count(<(t), neighbors(g,t)) == m0 for t in (n0+1):N)
+            @test is_connected(g) && !has_self_loops(g)
+            @test all(issorted, g.fadjlist)
+            @test minimum(degree(g)) >= m0
+            @test g == preferential_random_graph(N, α; m0, rng=Xoshiro(31))
+            p = pr_pk(α, 100_000; m0)
+            @test all(iszero, p[1:m0-1])
+            @test sum(p) ≈ 1 atol=1e-7
+            @test sum(k*p[k] for k in eachindex(p)) ≈ 2m0 atol=0.001
+            if α == 0
+                @test p[m0:50] ≈ [1/(1+m0)*(m0/(1+m0))^(k-m0) for k in m0:50]
+            elseif α == 1
+                @test p[m0:50] ≈ [2m0*(m0+1)/(k*(k+1)*(k+2)) for k in m0:50]
+            end
+        end
+        for m0 in (1, 2, 4)
+            @test pr_qexp(0.6; m0).κ ≈ (2*0.4*m0+1)/2.6
+            @test pr_qexp(0.6; m0, approximation=:continuum).κ ≈ 2*0.4*m0/2.6
+            @test pr_qexp(0.6; m0).q ≈ pr_qexp(0.6).q
+            @test pr_qexp(1.0; m0, approximation=:continuum).κ == 0
+            @test pr_qexp(0.0; m0).κ ≈ 1/log1p(1/m0)
+        end
+        @test isempty(pr_pk(0.5, 0; m0=2))
+        @test pr_pk(0.5, 1; m0=2) == [0.0]
+        @test_throws AssertionError preferential_random_graph(100, 0.5; m0=0)
+        @test_throws AssertionError preferential_random_graph(100, 0.5; m0=4, n0=3)
+        @test_throws AssertionError pr_pk(0.5, 10; m0=0)
+        @test_throws ArgumentError pr_qexp(0.5; approximation=:unknown)
+
+        # After the first m0=2 birth on K3, old degrees are {3,3,2,2}.
+        # Check the probability of choosing both high-degree vertices in the
+        # next birth against sequential mixed-weight sampling without replacement.
+        rng, trials, highpairs = Xoshiro(32), 8000, 0
+        α = 0.6
+        for _ in 1:trials
+            g = preferential_random_graph(5, α; m0=2, n0=3, rng)
+            targets = neighbors(g, 5)
+            highpairs += all(degree(g,v)-1 == 3 for v in targets)
+        end
+        ph = α*3/10 + (1-α)/4
+        expected = 2ph^2/(1-ph)
+        @test abs(highpairs/trials-expected) <= 5sqrt(expected*(1-expected)/trials)
+
+        # Limiting recurrence versus independent finite growing ensembles.
+        for α in (0.0, 0.5, 1.0), m0 in (2, 4)
+            degs = reduce(vcat, [degree(preferential_random_graph(50_000, α;
+                m0, rng=Xoshiro(100+s))) for s in 1:4])
+            p = pr_pk(α, 30; m0)
+            @test all(abs(count(==(k),degs)/length(degs)-p[k]) < 0.008 for k in m0:20)
+        end
+    end
+
     @testset "q-exponential: large-k limit of the rate equation" begin
         # n_k / e_q(-k/κ) tends to a constant, with q of Eq. (21)
         for α in (0.2, 0.5, 0.9)

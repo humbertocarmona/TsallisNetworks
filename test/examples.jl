@@ -1,5 +1,6 @@
 # Examples: generate C-R and P-R networks of Ochiai & Nacher, Physica A 388,
-# 4887 (2009), and edge-recruitment networks; compute their observables. Not part of the
+# 4887 (2009), and edge-recruitment networks; compute their observables and
+# illustrate productivity-driven collaborator counts. Not part of the
 # test suite (runtests.jl); run it from the package folder with
 #
 #   julia --project=. -t 4 test/examples.jl
@@ -50,6 +51,21 @@ degs = degree(g_pr)
 println("\nP-R, α = $α: q = $(round(q; digits=4)), κ = $(round(κ; digits=4))")
 println(DataFrame(k=1:10, simulation=[mean(degs .== k) for k in 1:10],
     rate_equation=pk, qexp=qexp[1:10]))
+# Multi-edge P-R extension: m0 distinct targets per arrival, with frozen weights.
+# Repeat the whole preferential/uniform mixture after duplicate-target rejection.
+m_pr = 2
+α_pr_multi = 0.6
+g_pr_multi = preferential_random_graph(N, α_pr_multi; m0=m_pr, rng=Xoshiro(2))
+deg_pr_multi = degree(g_pr_multi)
+pk_pr_multi = pr_pk(α_pr_multi, 20; m0=m_pr)
+parameters_pr_multi = pr_qexp(α_pr_multi; m0=m_pr, approximation=:continuum)
+println("\nMulti-edge P-R: m0=$m_pr, continuum parameters=$parameters_pr_multi")
+println(DataFrame(k=m_pr:20,
+    simulation=[mean(deg_pr_multi .== k) for k in m_pr:20],
+    stationary_prediction=pk_pr_multi[m_pr:20]))
+# This recurrence uses the large-N approximation to distinct-target inclusion
+# probabilities. The continuum q-exponential makes an additional degree approximation.
+
 # %% --------------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # 3. Observables of one network
@@ -183,3 +199,45 @@ println("Projected <ℓ> (500 sources): ",
 g_er0 = edge_recruitment_graph(N; L=0, rng=Xoshiro(7))
 @assert ne(simple_projection(g_er0)) == ne(g_er0)
 println("L = 0 continuum parameters (pure power law): ", recruitment_qexp(0))
+
+# ---------------------------------------------------------------------------
+# 6. Productivity-driven collaborator counts (ego-level toy model, not a graph)
+# ---------------------------------------------------------------------------
+using TsallisNetworks.ProductivityCollaboration
+
+# Motivation: Frota et al., "Causal asymmetry suggests productivity underlies
+# scientific collaboration", PNAS Nexus (2026), doi:10.1093/pnasnexus/pgag360.
+# Their conditional statistics motivate the geometric–lognormal mixture.
+# The Yule exposure mechanism below is a proposed explanation, not a mechanism
+# established by that paper. These parameter values illustrate its reported
+# scaling; no empirical data are fitted or loaded by this example.
+collab_settings = (b=0.33, beta=1.3, logmean=4.22, logsigma=0.75)
+collab_population = productivity_collaboration(N; collab_settings..., rng=Xoshiro(80))
+println("\nProductivity-driven population: ", length(collab_population.collaborators), " egos")
+println("Mean collaborator count = ", mean(collab_population.collaborators),
+    "; mean specified conditional mean = ", mean(collab_population.conditional_mean))
+
+# Compare the sampled marginal with deterministic integration over productivity.
+# These are probability masses, with no renormalization to the displayed range.
+collab_ks = collect(1:20)
+collab_theory = collaboration_mixture_pmf(collab_ks; collab_settings...)
+println(DataFrame(C=collab_ks,
+    simulation=[mean(collab_population.collaborators .== k) for k in collab_ks],
+    mixture_prediction=collab_theory))
+
+# At fixed productivity, verify the geometric mean and variance separately.
+fixed_productivity = 50.0
+collab_fixed = productivity_collaboration(fill(fixed_productivity, 50_000);
+    b=collab_settings.b, beta=collab_settings.beta, rng=Xoshiro(81))
+collab_mu = collaboration_mean(fixed_productivity; b=collab_settings.b, beta=collab_settings.beta)
+println("Fixed A=$fixed_productivity: sample mean = ", mean(collab_fixed.collaborators),
+    ", prediction = ", collab_mu, "; sample variance = ", var(collab_fixed.collaborators),
+    ", prediction = ", collab_mu * (collab_mu - 1))
+
+# One coupled trajectory: existing collaborators create further opportunities
+# at rate C in exposure s(A)=log(max(1,b*A^beta)). Productivity drives the clock.
+# These A values are continuous covariates/observation points, not paper events.
+collab_path = collaboration_trajectory([1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0];
+    b=collab_settings.b, beta=collab_settings.beta, rng=Xoshiro(82))
+println("One exposure-time trajectory:\n", DataFrame(collab_path))
+# No adjacency matrix or reciprocal collaborator identities are generated.

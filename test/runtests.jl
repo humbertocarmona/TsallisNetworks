@@ -16,5 +16,6 @@ using Test
     include("configuration_model.jl")
     include("preferential_random.jl")
     include("edge_recruitment.jl")
+    include("productivity_collaboration.jl")
     include("spatial_preferential_attachment.jl")
 end

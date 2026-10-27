@@ -11,6 +11,7 @@ include("CopyRandom/CopyRandom.jl")
 include("ConfigurationModel/ConfigurationModel.jl")
 include("PreferentialRandom/PreferentialRandom.jl")
 include("EdgeRecruitment/EdgeRecruitment.jl")
+include("ProductivityCollaboration/ProductivityCollaboration.jl")
 include("SpatialPreferentialAttachment/SpatialPreferentialAttachment.jl")
 
 export CopyRandom,
@@ -18,6 +19,7 @@ export CopyRandom,
     EdgeRecruitment,
     Observables,
     PreferentialRandom,
+    ProductivityCollaboration,
     SpatialPreferentialAttachment,
     expq,
     lnq,
